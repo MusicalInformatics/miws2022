@@ -10,9 +10,11 @@ dependencies:
   - Cython
   - matplotlib
   - numpy
+  - pytorch
   - scipy
   - tqdm
   - pip
+  - scikit-learn
   - jupyter
   - ipython
   - pandas
