@@ -4,7 +4,7 @@
 single script challenge submission template
 """
 
-import partitura
+import partitura as pt
 import os
 
 # Uncomment this line if the kernel keeps crashing
@@ -53,7 +53,7 @@ def compute_pianoroll_score(
     `compute_pianoroll_performance` are almost identical functions,
     but you can/should play with different settings/options/features
     """
-    piano_roll, idx = partitura.utils.music.compute_pianoroll(
+    piano_roll, idx = pt.utils.music.compute_pianoroll(
         note_info=score_note_array,
         return_idxs=True,
         piano_range=True,  # Since we are using only piano music,
@@ -87,7 +87,7 @@ def compute_pianoroll_performance(
     `compute_pianoroll_performance` are almost identical functions,
     but you can/should play with different settings/options/features
     """
-    piano_roll, idx = partitura.utils.music.compute_pianoroll(
+    piano_roll, idx = pt.utils.music.compute_pianoroll(
         note_info=performance_note_array,
         return_idxs=True,
         piano_range=True,  # Since we are using only piano music,
