@@ -25,3 +25,5 @@ dependencies:
     - python-rtmidi
     - partitura
     - SoundFile
+    - fastdtw
+    - python-hiddenmarkov
