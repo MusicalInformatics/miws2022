@@ -322,3 +322,174 @@ def sample_loop(model,
             y = torch.cat((y,sample[:,-1:,:]), dim=1)
         
     return y
+
+
+########################################################
+
+import mido
+from partitura.performance import Performance, PerformedPart
+
+def note_hash(channel: int, pitch: int) -> int:
+    """Generate a note hash."""
+    return channel * 128 + pitch
+
+def load_performance_midi(
+    filename,
+    default_bpm  = 120,
+    merge_tracks = False,
+    time_in_divs  = False,
+) :
+    """Load a musical performance from a MIDI file.
+    This function should be used for MIDI files that encode
+    performances, such as those obtained from a capture of a MIDI
+    instrument. This function loads note on/off events as well as
+    control events, but ignores other data such as time and key
+    signatures. Furthermore, the PerformedPart instance that the
+    function returns does not retain the ticks_per_beat or tempo
+    events. The timing of all events is represented in seconds. If you
+    wish to retain this information consider using the
+    `load_score_midi` function.
+    Parameters
+    ----------
+    filename : str
+        Path to MIDI file
+    default_bpm : number, optional
+        Tempo to use wherever the MIDI does not specify a tempo.
+        Defaults to 120.
+    merge_tracks: bool, optional
+        For MIDI files, merges all tracks into a single track.
+    Returns
+    -------
+    :class:`partitura.performance.Performance`
+        A Performance instance.
+    """
+
+    
+    mid = mido.MidiFile(filename)
+    doc_name = filename
+
+    # parts per quarter
+    ppq = mid.ticks_per_beat
+    # microseconds per quarter
+    mpq = 60 * (10 ** 6 / default_bpm)
+
+    # convert MIDI ticks in seconds
+    if time_in_divs:
+        time_conversion_factor = 1
+    else:
+        time_conversion_factor = mpq / (ppq * 10 ** 6)
+
+    notes = []
+    controls = []
+    programs = []
+    if merge_tracks:
+        mid_merge = mido.merge_tracks(mid.tracks)
+        tracks = [(0, mid_merge)]
+    else:
+        tracks = [(i, u) for i, u in enumerate(mid.tracks)]
+    for i, track in tracks:
+
+        t = 0
+        sounding_notes = {}
+
+        for msg in track:
+
+            # update time deltas when they arrive
+            t = t + msg.time * time_conversion_factor
+
+            if msg.type == "set_tempo":
+
+                mpq = msg.tempo
+                
+                if time_in_divs:
+                    time_conversion_factor = 1
+                else:
+                    time_conversion_factor = mpq / (ppq * 10 ** 6)
+
+
+            elif msg.type == "control_change":
+
+                controls.append(
+                    dict(
+                        time=t,
+                        number=msg.control,
+                        value=msg.value,
+                        track=i,
+                        channel=msg.channel,
+                    )
+                )
+
+            elif msg.type == "program_change":
+
+                programs.append(
+                    dict(
+                        time=t,
+                        program=msg.program,
+                        track=i,
+                        channel=msg.channel,
+                    )
+                )
+
+            else:
+
+                note_on = msg.type == "note_on"
+                note_off = msg.type == "note_off"
+
+                if not (note_on or note_off):
+                    continue
+
+                # hash sounding note
+                note = note_hash(msg.channel, msg.note)
+
+                # start note if it's a 'note on' event with velocity > 0
+                if note_on and msg.velocity > 0:
+
+                    # save the onset time and velocity
+                    sounding_notes[note] = (t, msg.velocity)
+
+                # end note if it's a 'note off' event or 'note on' with velocity 0
+                elif note_off or (note_on and msg.velocity == 0):
+
+                    if note not in sounding_notes:
+                        continue
+
+                    # append the note to the list associated with the channel
+
+                    notes.append(
+                        dict(
+                            # id=f"n{len(notes)}",
+                            midi_pitch=msg.note,
+                            note_on=(sounding_notes[note][0]),
+                            note_off=(t),
+                            track=i,
+                            channel=msg.channel,
+                            velocity=sounding_notes[note][1],
+                        )
+                    )
+
+                    # remove hash from dict
+                    del sounding_notes[note]
+
+        # fix note ids so that it is sorted lexicographically
+        # by onset, pitch, offset, channel and track
+        notes.sort(
+            key=lambda x: (
+                x["note_on"],
+                x["midi_pitch"],
+                x["note_off"],
+                x["channel"],
+                x["track"],
+            )
+        )
+
+        # add note id to every note
+        for i, note in enumerate(notes):
+            note["id"] = f"n{i}"
+
+    pp = PerformedPart(notes, controls=controls, programs=programs, ppq = ppq)
+
+    perf = Performance(
+        id=doc_name,
+        performedparts=pp,
+    )
+    return perf
